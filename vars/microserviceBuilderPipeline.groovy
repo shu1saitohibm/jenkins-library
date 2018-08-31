@@ -28,6 +28,7 @@
     namespace = 'targetNamespace' - deploys into Kubernetes targetNamespace.
       Default is to deploy into Jenkins' namespace.
     libertyLicenseJarName - override for Pipeline.LibertyLicenseJar.Name
+    noGitSslVerify = 'true' - Skil SSL verfication on git commands (git config --global http.sslVerify false)
 
 -------------------------*/
 
@@ -60,6 +61,7 @@ def call(body) {
   def deploy = (config.deploy ?: env.DEPLOY ?: "true").toBoolean()
   def namespace = (config.namespace ?: env.NAMESPACE ?: "").trim()
   def serviceAccountName = (env.SERVICE_ACCOUNT_NAME ?: "default").trim()
+  def noGitSslVerify = (config.noGitSslVerify ?: "true").toBoolean()
 
   // these options were all added later. Helm chart may not have the associated properties set.
   def test = (config.test ?: (env.TEST ?: "false").trim()).toLowerCase() == 'true'
@@ -78,7 +80,7 @@ def call(body) {
 
   print "microserviceBuilderPipeline: registry=${registry} registrySecret=${registrySecret} build=${build} \
   deploy=${deploy} test=${test} debug=${debug} namespace=${namespace} \
-  chartFolder=${chartFolder} manifestFolder=${manifestFolder} alwaysPullImage=${alwaysPullImage} serviceAccountName=${serviceAccountName}"
+  chartFolder=${chartFolder} manifestFolder=${manifestFolder} alwaysPullImage=${alwaysPullImage} serviceAccountName=${serviceAccountName} noGitSslVerify=${noGitSslVerify}"
 
 
   def jobName = (env.JOB_BASE_NAME)
@@ -130,6 +132,11 @@ def call(body) {
       devopsHost = sh(script: "echo \$${mcReleaseName}_IBM_MICROCLIMATE_DEVOPS_SERVICE_HOST", returnStdout: true).trim()	       
       devopsPort = sh(script: "echo \$${mcReleaseName}_IBM_MICROCLIMATE_DEVOPS_SERVICE_PORT", returnStdout: true).trim()	      
       devopsEndpoint = "https://${devopsHost}:${devopsPort}"
+      
+      if (noGitSslVerify) {
+		echo "skip SSL verification for git commands."
+		sh(script: 'git config --global http.sslVerify false')
+      }
 
       stage ('Extract') {
 	  checkout scm
