@@ -29,6 +29,7 @@
       Default is to deploy into Jenkins' namespace.
     libertyLicenseJarName - override for Pipeline.LibertyLicenseJar.Name
     noGitSslVerify = 'true' - Skil SSL verfication on git commands (git config --global http.sslVerify false)
+    directDeploy = 'true' - Deploy directly from this pipeline.
 
 -------------------------*/
 
@@ -62,6 +63,7 @@ def call(body) {
   def namespace = (config.namespace ?: env.NAMESPACE ?: "").trim()
   def serviceAccountName = (env.SERVICE_ACCOUNT_NAME ?: "default").trim()
   def noGitSslVerify = (config.noGitSslVerify ?: "true").toBoolean()
+  def directDeploy = (config.directDeploy ?: "true").toBoolean()
 
   // these options were all added later. Helm chart may not have the associated properties set.
   def test = (config.test ?: (env.TEST ?: "false").trim()).toLowerCase() == 'true'
@@ -340,8 +342,44 @@ def call(body) {
           initalizeHelm ()
           helmInitialized = true
         }
-        notifyDevops(gitCommit, fullCommitID, registry + image, imageTag, 
-          branchName, "build", projectName, projectNamespace, env.BUILD_NUMBER.toInteger())
+        
+        
+        if (!directDeploy) {
+          notifyDevops(gitCommit, fullCommitID, registry + image, imageTag, 
+            branchName, "build", projectName, projectNamespace, env.BUILD_NUMBER.toInteger())
+        } else {
+          stage ('Deploy with Helm') {
+          print "Deploy to namespace " + namespace
+          String tempHelmRelease = (image + "-" + namespace)
+          // Name cannot end in '-' or be longer than 53 chars
+          while (tempHelmRelease.endsWith('-') || tempHelmRelease.length() > 53) tempHelmRelease = tempHelmRelease.substring(0,tempHelmRelease.length()-1)
+          
+          //Target namespace must be present and the registry secret is granted to the default-sa for the namespace
+          //container ('kubectl') {
+          //  sh "kubectl create namespace ${namespace}"
+          //  sh "kubectl label namespace ${testNamespace} test=true"
+          //  if (registrySecret) {
+          //    giveRegistryAccessToNamespace (testNamespace, registrySecret)
+          //  }
+          //}
+          if (!helmInitialized) {
+            initalizeHelm ()
+            helmInitialized = true
+          }
+          
+          container ('helm') {
+            def deployCommand = "helm upgrade --install --wait --values pipeline.yaml --namespace ${namespace} ${tempHelmRelease} ${realChartFolder}"
+            if (fileExists("chart/overrides.yaml")) {
+              deployCommand += " --values chart/overrides.yaml"
+            }
+            if (helmSecret) {
+              echo "adding --tls"
+              deployCommand += helmTlsOptions
+            }
+            sh deployCommand
+          }
+          }
+        }
       }
     }
   }
@@ -501,4 +539,9 @@ def getChartFolder(String userSpecified, String currentChartFolder) {
       }
     }
   }
+}
+
+def deployWithHelm(String targetNamespace, String releaseName) {
+
+
 }
