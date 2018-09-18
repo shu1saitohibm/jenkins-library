@@ -55,6 +55,7 @@ def call(body) {
   def build = (config.build ?: env.BUILD ?: "true").toBoolean()
   def deploy = (config.deploy ?: env.DEPLOY ?: "true").toBoolean()
   def mvnCommands = (config.mvnCommands == null) ? 'package' : config.mvnCommands
+  def gitNoSslVerify = (config.gitNoSslVerify ?: "true").toBoolean()
   def test = (config.test ?: (env.TEST ?: "false").trim()).toLowerCase() == 'true'
   def debug = (config.debug ?: (env.DEBUG ?: "false").trim()).toLowerCase() == 'true'
   def userSpecifiedChartFolder = config.chartFolder
@@ -135,6 +136,11 @@ def call(body) {
       devopsHost = sh(script: "echo \$${mcReleaseName}_IBM_MICROCLIMATE_DEVOPS_SERVICE_HOST", returnStdout: true).trim()	       
       devopsPort = sh(script: "echo \$${mcReleaseName}_IBM_MICROCLIMATE_DEVOPS_SERVICE_PORT", returnStdout: true).trim()	      
       devopsEndpoint = "https://${devopsHost}:${devopsPort}"
+      
+      if (gitNoSslVerify) {
+		echo "skip SSL verification for git commands."
+		sh(script: 'git config --global http.sslVerify false')
+      }
 
       stage ('Extract') {
 	  checkout scm
